@@ -1,0 +1,37 @@
+AGAIN:
+	LDA 2000H
+	RLC		;rotate to the left to check the msb
+	JNC AGAIN	;if msb is 0, again
+	JC AGAIN2	;if msb is 1, again2
+	
+AGAIN2:
+	LDA 2000H
+	RLC	
+	JNC MAIN	;if msb is 0, go to main
+	JMP AGAIN2	;else
+
+MAIN:	
+	MVI D,1AH	;1A is the hex of 26 decimal. 26*0.786=20secs
+	STA 3000H
+
+DELAY:	
+	LXI B,0000H	;one full cycle of 4 bits --> 0.786secs
+
+LOOPD:	
+	LDA 2000H
+	CMP H
+	JNZ DELAY
+
+	DCX B
+	MOV A,B
+	ORA C
+	JNZ LOOPD
+
+	DCR D
+	JNZ DELAY
+	
+	CMA
+	STA 3000H
+
+END
+	

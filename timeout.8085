@@ -1,0 +1,91 @@
+INIT:
+    IN 10H                      ;Απενεργοποιούμε την προστασία μνήμης
+    
+    MVI A,0DH                   ;Αρχικοποιούμε την μάσκα διακοπής
+    SIM                         
+    EI                          ;Ενεργοποίηση μάσκας διακοπής // enable interrupt
+
+    MVI A,10H                   ;Αρχικοποίηση display
+    STA 0BF0H                   ;Για κάθε θέση του 7 segment display
+    STA 0BF1H
+    STA 0BF2H
+    STA 0BF3H
+    STA 0BF4H
+    STA 0BF5H
+
+WAIT_FOR_INTR:                  ;Άπειρο LOOP αναμονής για διακοπή 
+    JMP WAIT_FOR_INTR
+
+INTR_ROUTINE:                   ;Ρουτινά που ενεργοποιείται στην περίπτωση διακοπής
+    EI                          ;Επιτρέπουμε την διακοπή μέσα στην ρουτίνα διακοπής
+    MVI A,00H                   ;Ανάβουμε όλα τα LED
+    STA 3000H
+    MVI H,05H                   ;Ξεκινάμε να μετράμε από το 59
+    MOV A,H                     ;Αποθηκεύουμε τον αριθμό στον Accumulator για να περαστεί στο display 
+    STA 0BF4H                   ;Βάζουμε τον αριθμό που αντιστοιχεί στις δεκάδες στο display
+
+RESET_UNIT_SECONDS:
+    MVI C,09H                   ;9 δευτερόλεπτα σε κάθε δεκάδα
+    MOV A,C				  ;βάζουμε τις μονάδες στον accumulator
+
+ITERATE_UNIT_SECONDS:
+    STA 0BF3H                   ;Αποθηκεύουμε τον αριθμό που αντιστοιχεί στις μονάδες στον Accumulator για να περαστεί στο display 
+    CALL DISPLAY                ;Τρέχουμε την ρουτίνα DISPLAY 
+    DCR A                       ;Μειώνουμε κατά ένα τις μονάδες
+    CPI 00H                     ;Ελέγχουμε αν οι μονάδες είναι 0
+    JNZ ITERATE_UNIT_SECONDS    ;Αν δεν είναι 0, συνεχίζουμε να μειώνουμε τις μονάδες
+ 
+    MVI C,00H                   ;Δεν έχουμε δείξει το μηδέν σαν ψηφίο μονάδες στο προηγούμενο loop
+    MOV A,C                     ;Μεταφέρουμε το τελευταίο ψηφίο μονάδες για αυτή τη δεκάδα στον Α
+    STA 0BF3H                   ;To τοποθετούμε στο 7 segment display
+    CALL DISPLAY                ;Καλούμε την ρουτίνα DISPLAY
+    CALL DELB
+
+    DCR H                       ;Μειώνουμε τις δεκάδες
+    JZ ZEROS                    ;Αν οι δεκάδες είναι ίσες με μηδέν αυτό σημαίνει ότι πρέπει να κλείσουμε τα φώτα
+
+    MOV A,H                     ;Αν δεν είναι πρέπει να ανανεώσουμε τη θέση του 7 segment display για τις δεκάδες
+    STA 0BF4H                   ;Κάνουμε την ανανέωση
+    JMP RESET_UNIT_SECONDS      ;Πρέπει να ανανεώσουμε και τα ψηδία μονάδων για να δείξουμε το αποτέλεσμα στο display
+
+ZEROS:
+    MVI A,00H
+    STA 0BF4H
+    MVI C,09H
+    MOV A,C
+
+LIGHTS_OFF:
+    STA 0BF3H
+    CALL DISPLAY
+    DCR A
+    CPI 00H
+    JNZ LIGHTS_OFF
+    MVI A,FFH                   ;Όλα μονάδες στον Accumulator σημαίνει όλα τα LED κλειστά
+    STA 3000H                   ;Βάζουμε την τιμή του Accumulator στα LED
+    JMP WAIT_FOR_INTR           ;Πάμε στο άπειρο LOOP για να περιμένουμε για κάποιο interrupt
+
+
+DISPLAY:                        ;Ρουτίνα ανανέωσης του display με ρουτίνες STDM και DCD
+    LXI B,0064H                 ;Αρχικοποιούμε τον Β για το DELAY στα 100msec
+    LXI D,0BF0H                 ;Αρχικοποιούμε την θέση που θα κοιτάξει το DCD για την ανανέωση του DISPLAY
+    PUSH PSW                    ;Σπρώχνουμε στο stack τον Accumulator και τα flags
+    PUSH H                      ;Σπρώχνουμε στο stack τον H-L
+    PUSH D                      ;Σπρώχνουμε στο stack τον D-E
+    PUSH B                      ;Σπρώχνουμε στο stack τον B-C	
+    
+    CALL STDM                   ;Μεταφέρουμε το μήνυμα στη σωστή θέση για το DCD
+    MVI A,0AH                   ;Δέκα φορές την καθυστέρηση που ορίσαμε για να ολοκληρώσουμε ένα δευτερόλεπτο
+
+1_SEC_PASSES:
+    CALL DCD                    ;'Φρεσκάρουμε' την οθόνη
+    CALL DELB                   ;Καλούμε την καθυστέρηση
+    DCR A                       ;Μείωνουμε τον Α κατά 1
+    CPI 00H                     ;Ελέγχουμε αν ισούται με μηδέν
+    JNZ 1_SEC_PASSES             ;Όσο είναι διαφορετικό από το μηδέν προχωράμε στο επόμενο iteration
+    POP B                       ;Διώχνουμε από το stack το B-C
+    POP D                      ;Διώχνουμε από το stack το D-E
+    POP H                      ;Διώχνουμε από το stack το H-L
+    POP PSW                    ;Διώχνουμε από το stack τον Accumulator και τα flags
+    RET                         ;RETurn στην διεύθυνση μνήμης του κυρίως προγράμματος
+END
+	
